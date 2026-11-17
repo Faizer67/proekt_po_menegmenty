@@ -1,0 +1,311 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учет выдачи оборудования (на месяц)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 950px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .alert-box {
+            background-color: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+        .alert-box h3 {
+            margin: 0 0 10px 0;
+            color: #856404;
+            font-size: 16px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        .field-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 18px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .btn-return {
+            background-color: #28a745;
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+        .btn-return:hover {
+            background-color: #218838;
+        }
+        .btn-notify {
+            background-color: #17a2b8;
+            margin-left: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+        .tomorrow-row {
+            background-color: #fff8e1;
+        }
+        .overdue-row {
+            background-color: #f8d7da;
+        }
+        .empty-msg {
+            text-align: center;
+            color: #777;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Учет выдачи оборудования</h1>
+
+    <!-- Блок уведомлений за 1 день до сдачи -->
+    <div id="reminderBox" class="alert-box">
+        <h3>🔔 Напоминание: завтра (через 1 день) истекает срок выдачи!</h3>
+        <ul id="reminderList" style="margin: 0; padding-left: 20px;"></ul>
+    </div>
+
+    <!-- Форма выдачи -->
+    <h2>Выдать оборудование (по умолчанию на 1 месяц)</h2>
+    <form id="issueForm">
+        <div class="form-grid">
+            <div class="field-group">
+                <label>Оборудование</label>
+                <input type="text" id="equipment" placeholder="Например: Ноутбук" required>
+            </div>
+            <div class="field-group">
+                <label>Номер кабинета</label>
+                <input type="text" id="room" placeholder="Например: 204" required>
+            </div>
+            <div class="field-group">
+                <label>ФИО получателя</label>
+                <input type="text" id="fullName" placeholder="Иванов И.И." required>
+            </div>
+            <div class="field-group">
+                <label>Телефон</label>
+                <input type="tel" id="phone" placeholder="+7 (999) 000-00-00" required>
+            </div>
+            <div class="field-group">
+                <label>Дата сдачи (+1 месяц)</label>
+                <input type="date" id="returnDate" required>
+            </div>
+        </div>
+        <button type="submit">➕ Оформить выдачу на месяц</button>
+        <button type="button" class="btn-notify" onclick="checkReminders(true)">🔔 Проверить уведомления</button>
+    </form>
+
+    <!-- Таблица выданного оборудования -->
+    <h2 style="margin-top: 30px;">Оборудование на руках</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Оборудование</th>
+                <th>Кабинет</th>
+                <th>ФИО</th>
+                <th>Телефон</th>
+                <th>Дата сдачи</th>
+                <th>Осталось</th>
+                <th>Действие</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <tr>
+                <td colspan="8" class="empty-msg">Сейчас все оборудование на месте</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    let records = [];
+    let nextId = 1;
+
+    // Функция получения даты ровно через 1 месяц
+    function getNextMonthString() {
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        return nextMonth.toISOString().split('T');
+    }
+
+    // При загрузке страницы ставим дату сдачи через 1 месяц
+    window.onload = function() {
+        document.getElementById('returnDate').value = getNextMonthString();
+    };
+
+    // Добавление записи
+    document.getElementById('issueForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const record = {
+            id: nextId++,
+            equipment: document.getElementById('equipment').value.trim(),
+            room: document.getElementById('room').value.trim(),
+            fullName: document.getElementById('fullName').value.trim(),
+            phone: document.getElementById('phone').value.trim(),
+            returnDate: document.getElementById('returnDate').value
+        };
+
+        records.push(record);
+        this.reset();
+        
+        // Снова ставим дату через 1 месяц для следующей выдачи
+        document.getElementById('returnDate').value = getNextMonthString();
+
+        renderTable();
+        checkReminders(false);
+    });
+
+    // Возврат оборудования
+    function returnItem(id) {
+        records = records.filter(item => item.id !== id);
+        renderTable();
+        checkReminders(false);
+    }
+
+    // Расчет разницы в днях между сегодняшним днем и датой сдачи
+    function getDaysLeft(returnDateStr) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const target = new Date(returnDateStr);
+        target.setHours(0, 0, 0, 0);
+        const diffTime = target - today;
+        return Math.round(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    // Отрисовка таблицы
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        if (records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">Сейчас все оборудование на месте</td></tr>';
+            return;
+        }
+
+        records.forEach(item => {
+            const daysLeft = getDaysLeft(item.returnDate);
+            const formattedDate = formatDate(item.returnDate);
+
+            let rowClass = '';
+            let statusText = `${daysLeft} дн.`;
+
+            if (daysLeft === 1) {
+                rowClass = 'tomorrow-row';
+                statusText = '⚠️ <b>Завтра (1 дн.)</b>';
+            } else if (daysLeft === 0) {
+                rowClass = 'overdue-row';
+                statusText = '🔥 <b>Сегодня!</b>';
+            } else if (daysLeft < 0) {
+                rowClass = 'overdue-row';
+                statusText = `❌ Просрочено (${Math.abs(daysLeft)} дн.)`;
+            }
+
+            const tr = document.createElement('tr');
+            if (rowClass) tr.className = rowClass;
+
+            tr.innerHTML = `
+                <td>${item.id}</td>
+                <td><strong>${item.equipment}</strong></td>
+                <td>${item.room}</td>
+                <td>${item.fullName}</td>
+                <td>${item.phone}</td>
+                <td>${formattedDate}</td>
+                <td>${statusText}</td>
+                <td><button class="btn-return" onclick="returnItem(${item.id})">✅ Принять</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Проверка уведомлений (срабатывает, когда до сдачи остался ровно 1 день)
+    function checkReminders(manualClick) {
+        const dueTomorrow = records.filter(item => getDaysLeft(item.returnDate) === 1);
+
+        const box = document.getElementById('reminderBox');
+        const list = document.getElementById('reminderList');
+        list.innerHTML = '';
+
+        if (dueTomorrow.length > 0) {
+            dueTomorrow.forEach(item => {
+                const li = document.createElement('li');
+                li.innerHTML = `<b>${item.equipment}</b> — Кабинет №${item.room}, ${item.fullName} (Тел: ${item.phone})`;
+                list.appendChild(li);
+            });
+            box.style.display = 'block';
+
+            if (manualClick) {
+                alert(`Напоминание! Завтра нужно сдать ${dueTomorrow.length} ед. оборудования. Подробности в желтом блоке сверху.`);
+            }
+        } else {
+            box.style.display = 'none';
+            if (manualClick) {
+                alert('На завтра сдач оборудования не запланировано.');
+            }
+        }
+    }
+
+    function formatDate(dateStr) {
+        const [year, month, day] = dateStr.split('-');
+        return `${day}.${month}.${year}`;
+    }
+</script>
+
+</body>
+</html>
